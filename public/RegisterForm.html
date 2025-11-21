@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html><body>
+  <h2>Реєстрація пристрою</h2>
+  <form action="/register" method="post" enctype="multipart/form-data">
+    <label for="inventory_name">Ім'я речі (обов'язково):</label><br>
+    <input type="text" id="inventory_name" name="inventory_name" required><br>
+    <label for="description">Опис:</label><br>
+    <textarea id="description" name="description"></textarea><br>
+    <label for="photo">Фото:</label><br>
+    <input type="file" id="photo" name="photo" accept="image/jpeg, image/png"><br><br>
+    <input type="submit" value="Зареєструвати">
+  </form>
+</body></html>
