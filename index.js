@@ -187,10 +187,47 @@ function handleInventoryRoutes(req, res) {
             }
         }
     }
-    
+    if (req.method === 'PUT') {
+        const urlParts = req.url.split('/').filter(part => part.length > 0);
+        const id = urlParts[1];
+
+        if (urlParts.length === 2 && urlParts[0] === 'inventory') {
+            // PUT /inventory/<ID>
+            const item = inventory.find(i => i.id === id);
+
+            if (!item) { // 404 Not Found
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Item not found');
+                return;
+            }
+
+            parseJsonBody(req).then(data => {
+                if (data.inventory_name) item.inventory_name = data.inventory_name;
+                if (data.description !== undefined) item.description = data.description;
+                
+                saveInventory();
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(item));
+
+            }).catch(err => { // 400 Bad Request: Невалідний JSON
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Invalid JSON body');
+            });
+            return;
+        }
+    }
     // Якщо дійшли сюди, значить або метод не підтримується, або URL неправильний
     handleMethodNotAllowed(req, res, ['GET', 'PUT', 'DELETE']);
 }
 function handleSearch(req, res) { /* ... */ }
-function parseJsonBody(req) { /* ... */ }
+function parseJsonBody(req) {
+    return new Promise((resolve, reject) => {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+            try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+        });
+        req.on('error', reject);
+    });
+}
 function handleMethodNotAllowed(req, res, allowedMethods) { /* ... */ }
