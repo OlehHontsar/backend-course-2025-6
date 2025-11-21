@@ -216,6 +216,53 @@ function handleInventoryRoutes(req, res) {
             return;
         }
     }
+    if (req.method === 'PUT') {
+        const urlParts = req.url.split('/').filter(part => part.length > 0);
+        const id = urlParts[1];
+        
+        // ... (існуючий код PUT /inventory/<ID>) ...
+
+        if (urlParts.length === 3 && urlParts[0] === 'inventory' && urlParts[2] === 'photo') {
+            // PUT /inventory/<ID>/photo
+            const item = inventory.find(i => i.id === id);
+
+            if (!item) { // 404 Not Found
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Item not found');
+                return;
+            }
+
+            const form = formidable({ uploadDir: CACHE_DIR, keepExtensions: true });
+
+            form.parse(req, (err, fields, files) => {
+                const photoFile = files.photo ? (Array.isArray(files.photo) ? files.photo[0] : files.photo) : null;
+
+                if (err || !photoFile) { // 400 Bad Request
+                    res.writeHead(400, { 'Content-Type': 'text/plain' });
+                    res.end('Photo file missing or upload error');
+                    return;
+                }
+                
+                // Видаляємо старе фото
+                if (item.photoPath && fs.existsSync(item.photoPath)) {
+                    fs.unlinkSync(item.photoPath);
+                }
+
+                // Зберігаємо нове фото
+                const fileExt = path.extname(photoFile.originalFilename);
+                const photoPath = path.join(CACHE_DIR, `${id}${fileExt}`);
+                fs.renameSync(photoFile.filepath, photoPath);
+
+                item.photoPath = photoPath;
+                item.photoUrl = `/inventory/${id}/photo`;
+                saveInventory();
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(item));
+            });
+            return;
+        }
+    }
     // Якщо дійшли сюди, значить або метод не підтримується, або URL неправильний
     handleMethodNotAllowed(req, res, ['GET', 'PUT', 'DELETE']);
 }
