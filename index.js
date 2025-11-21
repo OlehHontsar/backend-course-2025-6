@@ -263,7 +263,38 @@ function handleInventoryRoutes(req, res) {
             return;
         }
     }
-    // Якщо дійшли сюди, значить або метод не підтримується, або URL неправильний
+    if (req.method === 'DELETE') {
+        const urlParts = req.url.split('/').filter(part => part.length > 0);
+        const id = urlParts[1];
+
+        if (urlParts.length === 2 && urlParts[0] === 'inventory') {
+            // DELETE /inventory/<ID>
+            const itemIndex = inventory.findIndex(i => i.id === id);
+
+            if (itemIndex === -1) { // 404 Not Found
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Item not found');
+                return;
+            }
+
+            const deletedItem = inventory[itemIndex];
+            
+            // Видаляємо фото з FS
+            if (deletedItem.photoPath && fs.existsSync(deletedItem.photoPath)) {
+                fs.unlinkSync(deletedItem.photoPath);
+            }
+
+            // Видаляємо запис з інвентарю
+            inventory.splice(itemIndex, 1);
+            saveInventory();
+
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end(`Item ${id} deleted successfully.`);
+            return;
+        }
+    }
+
+    // Оновіть фінальний виклик, щоб він включав DELETE
     handleMethodNotAllowed(req, res, ['GET', 'PUT', 'DELETE']);
 }
 function handleSearch(req, res) { /* ... */ }
