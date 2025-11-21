@@ -1,47 +1,90 @@
-// Підключаємо необхідні модулі: http для сервера, fs та path для роботи з файлами/теками
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { Command } = require('commander');
+const querystring = require('querystring');
+const { program } = require('commander');
+const formidable = require('formidable');
 
-// Ініціалізуємо Commander
-const program = new Command();
-
-// Визначаємо обов'язкові параметри (-h, -p, -c)
-// Використовуємо .requiredOption() — Commander автоматично виведе помилку, якщо параметр пропущено.
+// --- 1. Налаштування Commander.js ---
 program
-    .requiredOption('-h, --host <type>', 'адреса сервера')
-    .requiredOption('-p, --port <number>', 'порт сервера', parseInt)
-    .requiredOption('-c, --cache <type>', 'шлях до директорії кешу')
-    .parse(process.argv);
+  .option('-h, --host <host>', 'адреса сервера', 'localhost')
+  .option('-p, --port <port>', 'порт сервера', 3000)
+  .option('-c, --cache <dir>', 'шлях до директорії кешу', 'cache')
+  .parse(process.argv);
 
-// Отримуємо значення параметрів з об'єкта options
 const options = program.opts();
-const { host, port, cache } = options;
+const HOST = options.host;
+const PORT = options.port;
+const CACHE_DIR = path.resolve(process.cwd(), options.cache);
+const INVENTORY_FILE = path.join(CACHE_DIR, 'inventory.json');
 
-console.log(`\nСпроба запуску сервера з параметрами: Host=${host}, Port=${port}, CacheDir=${cache}`);
+// --- 2. Ініціалізація сховища даних ---
+let inventory = [];
 
-// 1. Перевірка та створення директорії кешу, якщо її не існує
-const cacheDirFullPath = path.resolve(process.cwd(), cache);
-
-try {
-    // fs.mkdirSync створює теку. { recursive: true } дозволяє не перейматися, якщо батьківські теки чи сама тека вже існує.
-    fs.mkdirSync(cacheDirFullPath, { recursive: true });
-    console.log(`📂 Директорія кешу готова: ${cacheDirFullPath}`);
-} catch (err) {
-    console.error(`❌ Помилка при створенні директорії кешу: ${err.message}`);
-    process.exit(1); // Зупиняємо програму, якщо не можемо створити теку
+if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-// 2. Створення HTTP сервера за допомогою вбудованого модуля http
+function loadInventory() {
+    if (fs.existsSync(INVENTORY_FILE)) {
+        try {
+            const data = fs.readFileSync(INVENTORY_FILE, 'utf8');
+            inventory = JSON.parse(data);
+        } catch (e) {
+            console.error("Помилка читання inventory.json:", e.message);
+        }
+    }
+}
+loadInventory();
+
+function saveInventory() {
+    fs.writeFileSync(INVENTORY_FILE, JSON.stringify(inventory, null, 2), 'utf8');
+}
+
+// --- 3. Основний обробник HTTP запитів (Routing Logic) ---
 const server = http.createServer((req, res) => {
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.end(`Сервер працює!\nHost: ${host}, Port: ${port}\nCache Path: ${cacheDirFullPath}`);
+  const url = req.url;
+  const method = req.method;
+
+  // A. Обслуговування статичних форм
+  if (method === 'GET' && (url === '/RegisterForm.html' || url === '/SearchForm.html')) {
+      serveStaticFile(path.join(__dirname, 'public', url), res);
+      return;
+  }
+
+  // B. Обробка POST /register
+  if (url === '/register' && method === 'POST') {
+      handleRegister(req, res);
+      return;
+  }
+
+  // C. Обробка всіх маршрутів, що починаються з /inventory
+  if (url.startsWith('/inventory')) {
+      handleInventoryRoutes(req, res);
+      return;
+  }
+  
+  // D. Обробка POST /search
+  if (url === '/search' && method === 'POST') {
+      handleSearch(req, res);
+      return;
+  }
+
+  // E. Обробка 404 Not Found (за замовчуванням)
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('404 Not Found');
 });
 
-// 3. Запуск сервера, використовуючи значення host та port, отримані з командного рядка
-server.listen(port, host, () => {
-    console.log(`\n✅ Вебсервер успішно запущено та він слухає запити за адресою: http://${host}:${port}/`);
-    console.log('Натисніть Ctrl+C для зупинки.');
+// --- 4. Запуск сервера ---
+server.listen(PORT, HOST, () => {
+  console.log(`Server running at http://${HOST}:${PORT}/`);
 });
+
+// --- 5. Допоміжні функції (будуть додані нижче) ---
+
+function serveStaticFile(filePath, res) { /* ... */ }
+function handleRegister(req, res) { /* ... */ }
+function handleInventoryRoutes(req, res) { /* ... */ }
+function handleSearch(req, res) { /* ... */ }
+function parseJsonBody(req) { /* ... */ }
+function handleMethodNotAllowed(req, res, allowedMethods) { /* ... */ }

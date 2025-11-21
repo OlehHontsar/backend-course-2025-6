@@ -20,6 +20,7 @@
   "homepage": "https://github.com/OlehHontsar/backend-course-2025-6#readme",
   "dependencies": {
     "commander": "^14.0.2",
+    "formidable": "^3.5.4",
     "superagent": "^10.2.3"
   },
   "devDependencies": {
