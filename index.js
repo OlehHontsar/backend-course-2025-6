@@ -82,9 +82,115 @@ server.listen(PORT, HOST, () => {
 
 // --- 5. Допоміжні функції (будуть додані нижче) ---
 
-function serveStaticFile(filePath, res) { /* ... */ }
-function handleRegister(req, res) { /* ... */ }
-function handleInventoryRoutes(req, res) { /* ... */ }
+function serveStaticFile(filePath, res) {
+    fs.readFile(filePath, (err, data) => {
+        if (err) {
+            res.writeHead(404);
+            res.end("File not found");
+        } else {
+            const contentType = filePath.endsWith('.html') ? 'text/html' : 'text/plain';
+            res.writeHead(200, { 'Content-Type': contentType });
+            res.end(data);
+        }
+    });
+}
+function handleRegister(req, res) {
+    const form = formidable({ uploadDir: CACHE_DIR, keepExtensions: true });
+
+    form.parse(req, (err, fields, files) => {
+        if (err) { res.writeHead(500); res.end('Server Error'); return; }
+
+        // Commander fields/files normalization
+        const name = Array.isArray(fields.inventory_name) ? fields.inventory_name[0] : fields.inventory_name;
+        const description = Array.isArray(fields.description) ? fields.description[0] : fields.description;
+        const photoFile = files.photo ? (Array.isArray(files.photo) ? files.photo[0] : files.photo) : null;
+
+        if (!name) { // 400 Bad Request
+            if (photoFile && fs.existsSync(photoFile.filepath)) fs.unlinkSync(photoFile.filepath);
+            res.writeHead(400, { 'Content-Type': 'text/plain' });
+            res.end('Error: inventory_name is required.');
+            return;
+        }
+
+        const id = Date.now().toString(); 
+        let photoPath = null;
+
+        if (photoFile) {
+            const fileExt = path.extname(photoFile.originalFilename);
+            photoPath = path.join(CACHE_DIR, `${id}${fileExt}`);
+            fs.renameSync(photoFile.filepath, photoPath);
+        }
+
+        const newItem = {
+            id: id,
+            inventory_name: name,
+            description: description || '',
+            photoPath: photoPath,
+            photoUrl: photoPath ? `/inventory/${id}/photo` : null
+        };
+
+        inventory.push(newItem);
+        saveInventory();
+
+        res.writeHead(201, { 'Content-Type': 'application/json' }); // 201 Created
+        res.end(JSON.stringify(newItem));
+    });
+}
+function handleInventoryRoutes(req, res) {
+    const urlParts = req.url.split('/').filter(part => part.length > 0);
+    // urlParts = ['inventory', 'ID', 'photo']
+
+    if (req.method === 'GET') {
+        if (urlParts.length === 1 && urlParts[0] === 'inventory') {
+            // GET /inventory (Список усіх речей)
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            const publicInventory = inventory.map(item => ({
+                id: item.id,
+                inventory_name: item.inventory_name,
+                description: item.description,
+                photoUrl: item.photoUrl
+            }));
+            res.end(JSON.stringify(publicInventory));
+            return;
+        } 
+        
+        if (urlParts[0] === 'inventory' && urlParts.length >= 2) {
+            const id = urlParts[1];
+            const item = inventory.find(i => i.id === id);
+
+            if (!item) { // 404 Not Found: Річ не існує
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Item not found');
+                return;
+            }
+
+            if (urlParts[2] === 'photo' && urlParts.length === 3) {
+                // GET /inventory/<ID>/photo
+                if (!item.photoPath || !fs.existsSync(item.photoPath)) { // 404 Not Found: Фото не існує
+                    res.writeHead(404, { 'Content-Type': 'text/plain' });
+                    res.end('Photo not found');
+                    return;
+                }
+                res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+                fs.createReadStream(item.photoPath).pipe(res);
+                return;
+
+            } else if (urlParts.length === 2) {
+                // GET /inventory/<ID>
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                const publicItem = {
+                    id: item.id, inventory_name: item.inventory_name,
+                    description: item.description, photoUrl: item.photoUrl
+                };
+                res.end(JSON.stringify(publicItem));
+                return;
+            }
+        }
+    }
+    
+    // Якщо дійшли сюди, значить або метод не підтримується, або URL неправильний
+    handleMethodNotAllowed(req, res, ['GET', 'PUT', 'DELETE']);
+}
 function handleSearch(req, res) { /* ... */ }
 function parseJsonBody(req) { /* ... */ }
 function handleMethodNotAllowed(req, res, allowedMethods) { /* ... */ }
