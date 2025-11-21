@@ -297,7 +297,37 @@ function handleInventoryRoutes(req, res) {
     // Оновіть фінальний виклик, щоб він включав DELETE
     handleMethodNotAllowed(req, res, ['GET', 'PUT', 'DELETE']);
 }
-function handleSearch(req, res) { /* ... */ }
+function handleSearch(req, res) {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+
+    req.on('end', () => {
+        const formData = querystring.parse(body);
+        const id = formData.id;
+        const hasPhoto = !!formData.has_photo; 
+
+        const item = inventory.find(i => i.id === id);
+
+        if (!item) { // 404 Not Found
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Item not found');
+            return;
+        }
+
+        const result = {
+            id: item.id,
+            inventory_name: item.inventory_name,
+            description: item.description
+        };
+
+        if (hasPhoto && item.photoUrl) {
+            result.photoUrl = item.photoUrl;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+    });
+}
 function parseJsonBody(req) {
     return new Promise((resolve, reject) => {
         let body = '';
