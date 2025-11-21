@@ -43,36 +43,48 @@ function saveInventory() {
 
 // --- 3. Основний обробник HTTP запитів (Routing Logic) ---
 const server = http.createServer((req, res) => {
-  const url = req.url;
-  const method = req.method;
+    const url = req.url;
+    const method = req.method;
 
-  // A. Обслуговування статичних форм
-  if (method === 'GET' && (url === '/RegisterForm.html' || url === '/SearchForm.html')) {
-      serveStaticFile(path.join(__dirname, 'public', url), res);
-      return;
-  }
+    // --- A, B, C, D: Всі ваші існуючі маршрути залишаються тут ---
 
-  // B. Обробка POST /register
-  if (url === '/register' && method === 'POST') {
-      handleRegister(req, res);
-      return;
-  }
+    // A. Обслуговування статичних форм
+    if (method === 'GET' && (url === '/RegisterForm.html' || url === '/SearchForm.html')) {
+        serveStaticFile(path.join(__dirname, 'public', url), res);
+        return;
+    }
+    // B. Обробка POST /register
+    if (url === '/register' && method === 'POST') {
+        handleRegister(req, res);
+        return;
+    }
+    // C. Обробка всіх маршрутів, що починаються з /inventory
+    if (url.startsWith('/inventory')) {
+        handleInventoryRoutes(req, res); // Ця функція сама обробляє 405 для своїх URL
+        return;
+    }
+    // D. Обробка POST /search
+    if (url === '/search' && method === 'POST') {
+        handleSearch(req, res);
+        return;
+    }
 
-  // C. Обробка всіх маршрутів, що починаються з /inventory
-  if (url.startsWith('/inventory')) {
-      handleInventoryRoutes(req, res);
-      return;
-  }
-  
-  // D. Обробка POST /search
-  if (url === '/search' && method === 'POST') {
-      handleSearch(req, res);
-      return;
-  }
+    // --- E. Обробка 404 та 405 (кінцева логіка) ---
+    
+    // Перевіряємо, чи є запитуваний URL відомим базовим маршрутом
+    const knownBaseUrls = ['/register', '/inventory', '/search', '/RegisterForm.html', '/SearchForm.html'];
+    
+    // Витягуємо базову частину URL (наприклад, з /inventory/123/photo отримуємо /inventory)
+    const requestBaseUrl = '/' + req.url.split('/').filter(part => part.length > 0)[0];
 
-  // E. Обробка 404 Not Found (за замовчуванням)
-  res.writeHead(404, { 'Content-Type': 'text/plain' });
-  res.end('404 Not Found');
+    if (knownBaseUrls.includes(requestBaseUrl)) {
+        // Ми знаємо цей URL, але метод (наприклад, PUT для /search) не підтримується основним обробником
+        handleMethodNotAllowed(req, res, []); // Точний список дозволених методів повинен визначатися всередині обробників A, B, C, D
+    } else {
+        // Невідомий URL
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('404 Not Found');
+    }
 });
 
 // --- 4. Запуск сервера ---
@@ -338,4 +350,10 @@ function parseJsonBody(req) {
         req.on('error', reject);
     });
 }
-function handleMethodNotAllowed(req, res, allowedMethods) { /* ... */ }
+function handleMethodNotAllowed(req, res, allowedMethods) {
+    res.writeHead(405, { 
+        'Content-Type': 'text/plain', 
+        'Allow': allowedMethods.join(', ')
+    });
+    res.end('405 Method Not Allowed');
+}
