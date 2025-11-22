@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html><body>
-  <h2>Пошук пристрою за ID</h2>
+  <h2>Inventory Search</h2>
   <form action="/search" method="post" enctype="application/x-www-form-urlencoded">
-    <label for="id">Серійний номер/ID:</label><br>
+    <label for="id">ID:</label><br>
     <input type="text" id="id" name="id" required><br>
     <input type="checkbox" id="has_photo" name="has_photo">
-    <label for="has_photo"> Додати посилання на фото до опису</label><br><br>
-    <input type="submit" value="Шукати">
+    <label for="has_photo"> Include photo in description</label><br><br>
+    <input type="submit" value="Search">
   </form>
 </body></html>

@@ -4,6 +4,8 @@ const path = require('path');
 const querystring = require('querystring');
 const { program } = require('commander');
 const formidable = require('formidable');
+const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./swagger.json');
 
 // --- 1. Налаштування Commander.js ---
 program
@@ -68,7 +70,13 @@ const server = http.createServer((req, res) => {
         handleSearch(req, res);
         return;
     }
-
+    // Маршрут для документації Swagger UI на /docs
+    if (url.startsWith('/docs') && method === 'GET') {
+     // Це спрощений спосіб використання з чистим HTTP модулем. 
+     // В реальних проектах використовується Express.js.
+     swaggerUi.setup(swaggerDocument)(req, res);
+     return;
+}
     // --- E. Обробка 404 та 405 (кінцева логіка) ---
     
     // Перевіряємо, чи є запитуваний URL відомим базовим маршрутом
@@ -106,16 +114,7 @@ function serveStaticFile(filePath, res) {
         }
     });
 }
-/**
- * @file Основний файл сервера, що реалізує Web API для інвентаризації.
- * @author Ваше Ім'я bc2025-6
- */
 
-/**
- * Обробляє POST /register запити.
- * @param {http.IncomingMessage} req - Об'єкт запиту.
- * @param {http.ServerResponse} res - Об'єкт відповіді.
- */
 function handleRegister(req, res) {
     const form = formidable({ uploadDir: CACHE_DIR, keepExtensions: true });
 
