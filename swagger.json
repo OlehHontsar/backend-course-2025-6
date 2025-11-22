@@ -1,0 +1,253 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "API Проєкту (Приклад)",
+    "description": "Повний опис API проєкту, що включає 9 маршрутів для управління користувачами, продуктами та замовленнями.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api/v1",
+      "description": "Локальний сервер розробки"
+    }
+  ],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "Отримати список усіх користувачів",
+        "operationId": "listUsers",
+        "responses": {
+          "200": {
+            "description": "Успішне отримання списку користувачів"
+          }
+        }
+      },
+      "post": {
+        "summary": "Створити нового користувача",
+        "operationId": "createUser",
+        "requestBody": {
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Користувача успішно створено"
+          }
+        }
+      }
+    },
+    "/users/{userId}": {
+      "get": {
+        "summary": "Отримати користувача за ідентифікатором",
+        "operationId": "getUserById",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успішне отримання даних користувача"
+          },
+          "404": {
+            "description": "Користувача не знайдено"
+          }
+        }
+      },
+      "put": {
+        "summary": "Оновити дані користувача",
+        "operationId": "updateUser",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Дані користувача успішно оновлено"
+          },
+          "404": {
+            "description": "Користувача не знайдено"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Видалити користувача",
+        "operationId": "deleteUser",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Користувача успішно видалено"
+          },
+          "404": {
+            "description": "Користувача не знайдено"
+          }
+        }
+      }
+    },
+    "/products": {
+      "get": {
+        "summary": "Отримати список усіх продуктів",
+        "operationId": "listProducts",
+        "responses": {
+          "200": {
+            "description": "Успішне отримання списку продуктів"
+          }
+        }
+      },
+      "post": {
+        "summary": "Додати новий продукт",
+        "operationId": "createProduct",
+        "requestBody": {
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Продукт успішно додано"
+          }
+        }
+      }
+    },
+    "/orders": {
+      "get": {
+        "summary": "Отримати список усіх замовлень",
+        "operationId": "listOrders",
+        "responses": {
+          "200": {
+            "description": "Успішне отримання списку замовлень"
+          }
+        }
+      },
+      "post": {
+        "summary": "Оформити нове замовлення",
+        "operationId": "createOrder",
+        "requestBody": {
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Замовлення успішно оформлено"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "NewUser": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "email"
+        ]
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          }
+        }
+      },
+      "NewProduct": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "price"
+        ]
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "userId": {
+            "type": "integer"
+          },
+          "productId": {
+            "type": "integer"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "completed",
+              "cancelled"
+            ]
+          }
+        }
+      },
+      "NewOrder": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "integer"
+          },
+          "productId": {
+            "type": "integer"
+          },
+          "quantity": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "userId",
+          "productId",
+          "quantity"
+        ]
+      }
+    }
+  }
+}

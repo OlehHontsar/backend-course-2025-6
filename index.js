@@ -106,6 +106,16 @@ function serveStaticFile(filePath, res) {
         }
     });
 }
+/**
+ * @file Основний файл сервера, що реалізує Web API для інвентаризації.
+ * @author Ваше Ім'я bc2025-6
+ */
+
+/**
+ * Обробляє POST /register запити.
+ * @param {http.IncomingMessage} req - Об'єкт запиту.
+ * @param {http.ServerResponse} res - Об'єкт відповіді.
+ */
 function handleRegister(req, res) {
     const form = formidable({ uploadDir: CACHE_DIR, keepExtensions: true });
 
