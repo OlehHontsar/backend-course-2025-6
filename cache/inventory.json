@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1764062556717",
+    "inventory_name": "Лабораторна робота 6",
+    "photoPath": "C:\\Users\\Admin\\Desktop\\2_course\\3_semester\\Lab\\Web_backend_lab\\Lab_6_Inventory_service\\backend-course-2025-6\\cache\\1764062556717.png",
+    "photoUrl": "/inventory/1764062556717/photo"
+  },
+  {
+    "id": "1764179746707",
+    "inventory_name": "Лабораторна робота 6",
+    "photoPath": "C:\\Users\\Admin\\Desktop\\2_course\\3_semester\\Lab\\Web_backend_lab\\Lab_6_Inventory_service\\backend-course-2025-6\\cache\\1764179746707.png",
+    "photoUrl": "/inventory/1764179746707/photo"
+  },
+  {
+    "id": "1764181520416",
+    "inventory_name": "Лабораторна робота 6",
+    "photoPath": "C:\\Users\\Admin\\Desktop\\2_course\\3_semester\\Lab\\Web_backend_lab\\Lab_6_Inventory_service\\backend-course-2025-6\\cache\\1764181520416.png",
+    "photoUrl": "/inventory/1764181520416/photo"
+  }
+]
