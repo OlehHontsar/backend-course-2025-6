@@ -5,9 +5,11 @@ const querystring = require('querystring');
 const { program } = require('commander');
 const formidable = require('formidable');
 const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('./swagger.json');
+// Припускаємо, що swagger.json існує в тій же директорії
+const swaggerDocument = require('./swagger.json'); 
 
 // --- 1. Налаштування Commander.js ---
+// ... (існуючий код Commander) ...
 program
   .option('-h, --host <host>', 'адреса сервера', 'localhost')
   .option('-p, --port <port>', 'порт сервера', 3000)
@@ -21,6 +23,7 @@ const CACHE_DIR = path.resolve(process.cwd(), options.cache);
 const INVENTORY_FILE = path.join(CACHE_DIR, 'inventory.json');
 
 // --- 2. Ініціалізація сховища даних ---
+// ... (існуючий код ініціалізації сховища) ...
 let inventory = [];
 
 if (!fs.existsSync(CACHE_DIR)) {
@@ -43,12 +46,21 @@ function saveInventory() {
     fs.writeFileSync(INVENTORY_FILE, JSON.stringify(inventory, null, 2), 'utf8');
 }
 
+
 // --- 3. Основний обробник HTTP запитів (Routing Logic) ---
 const server = http.createServer((req, res) => {
+    // Middleware для Swagger UI з використанням чистого http модуля
+    if (req.url.startsWith('/docs')) {
+        // swagger-ui-express очікує формат req/res Express.js, 
+        // що сумісний з нативним http модулем Node.js
+        swaggerUi.serve[0](req, res, () => {
+            swaggerUi.setup(swaggerDocument)(req, res);
+        });
+        return;
+    }
+
     const url = req.url;
     const method = req.method;
-
-    // --- A, B, C, D: Всі ваші існуючі маршрути залишаються тут ---
 
     // A. Обслуговування статичних форм
     if (method === 'GET' && (url === '/RegisterForm.html' || url === '/SearchForm.html')) {
@@ -62,7 +74,7 @@ const server = http.createServer((req, res) => {
     }
     // C. Обробка всіх маршрутів, що починаються з /inventory
     if (url.startsWith('/inventory')) {
-        handleInventoryRoutes(req, res); // Ця функція сама обробляє 405 для своїх URL
+        handleInventoryRoutes(req, res);
         return;
     }
     // D. Обробка POST /search
@@ -70,23 +82,16 @@ const server = http.createServer((req, res) => {
         handleSearch(req, res);
         return;
     }
-    // Маршрут для документації Swagger UI на /docs
-    if (url.startsWith('/docs') && method === 'GET') {
-     // Це спрощений спосіб використання з чистим HTTP модулем. 
-     // В реальних проектах використовується Express.js.
-     swaggerUi.setup(swaggerDocument)(req, res);
-     return;
-}
+
     // --- E. Обробка 404 та 405 (кінцева логіка) ---
-    
-    // Перевіряємо, чи є запитуваний URL відомим базовим маршрутом
-    const knownBaseUrls = ['/register', '/inventory', '/search', '/RegisterForm.html', '/SearchForm.html'];
+    const knownBaseUrls = ['/register', '/inventory', '/search', '/RegisterForm.html', '/SearchForm.html', '/docs'];
     
     // Витягуємо базову частину URL (наприклад, з /inventory/123/photo отримуємо /inventory)
-    const requestBaseUrl = '/' + req.url.split('/').filter(part => part.length > 0)[0];
+    // Обробляємо корінь / окремо
+    const requestBaseUrl = url === '/' ? '/' : '/' + url.split('/').filter(part => part.length > 0)[0];
 
     if (knownBaseUrls.includes(requestBaseUrl)) {
-        // Ми знаємо цей URL, але метод (наприклад, PUT для /search) не підтримується основним обробником
+        // Ми знаємо цей URL, але метод не підтримується
         handleMethodNotAllowed(req, res, []); // Точний список дозволених методів повинен визначатися всередині обробників A, B, C, D
     } else {
         // Невідомий URL
@@ -98,9 +103,10 @@ const server = http.createServer((req, res) => {
 // --- 4. Запуск сервера ---
 server.listen(PORT, HOST, () => {
   console.log(`Server running at http://${HOST}:${PORT}/`);
+  console.log(`Swagger UI available at http://${HOST}:${PORT}/docs`);
 });
 
-// --- 5. Допоміжні функції (будуть додані нижче) ---
+// --- 5. Допоміжні функції ---
 
 function serveStaticFile(filePath, res) {
     fs.readFile(filePath, (err, data) => {
@@ -214,72 +220,32 @@ function handleInventoryRoutes(req, res) {
 
         if (urlParts.length === 2 && urlParts[0] === 'inventory') {
             // PUT /inventory/<ID>
-            const item = inventory.find(i => i.id === id);
+            const itemIndex = inventory.findIndex(i => i.id === id);
 
-            if (!item) { // 404 Not Found
+            if (itemIndex === -1) { // 404 Not Found
                 res.writeHead(404, { 'Content-Type': 'text/plain' });
                 res.end('Item not found');
                 return;
             }
-
-            parseJsonBody(req).then(data => {
-                if (data.inventory_name) item.inventory_name = data.inventory_name;
-                if (data.description !== undefined) item.description = data.description;
-                
-                saveInventory();
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(item));
-
-            }).catch(err => { // 400 Bad Request: Невалідний JSON
-                res.writeHead(400, { 'Content-Type': 'text/plain' });
-                res.end('Invalid JSON body');
+            
+            // Очікуємо JSON тіло для оновлення
+            let body = '';
+            req.on('data', chunk => {
+                body += chunk.toString();
             });
-            return;
-        }
-    }
-    if (req.method === 'PUT') {
-        const urlParts = req.url.split('/').filter(part => part.length > 0);
-        const id = urlParts[1];
-        
-        // ... (існуючий код PUT /inventory/<ID>) ...
-
-        if (urlParts.length === 3 && urlParts[0] === 'inventory' && urlParts[2] === 'photo') {
-            // PUT /inventory/<ID>/photo
-            const item = inventory.find(i => i.id === id);
-
-            if (!item) { // 404 Not Found
-                res.writeHead(404, { 'Content-Type': 'text/plain' });
-                res.end('Item not found');
-                return;
-            }
-
-            const form = formidable({ uploadDir: CACHE_DIR, keepExtensions: true });
-
-            form.parse(req, (err, fields, files) => {
-                const photoFile = files.photo ? (Array.isArray(files.photo) ? files.photo[0] : files.photo) : null;
-
-                if (err || !photoFile) { // 400 Bad Request
+            req.on('end', () => {
+                try {
+                    const updates = JSON.parse(body);
+                    if (updates.inventory_name) inventory[itemIndex].inventory_name = updates.inventory_name;
+                    if (updates.description) inventory[itemIndex].description = updates.description;
+                    
+                    saveInventory();
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(inventory[itemIndex]));
+                } catch (e) {
                     res.writeHead(400, { 'Content-Type': 'text/plain' });
-                    res.end('Photo file missing or upload error');
-                    return;
+                    res.end('Invalid JSON body');
                 }
-                
-                // Видаляємо старе фото
-                if (item.photoPath && fs.existsSync(item.photoPath)) {
-                    fs.unlinkSync(item.photoPath);
-                }
-
-                // Зберігаємо нове фото
-                const fileExt = path.extname(photoFile.originalFilename);
-                const photoPath = path.join(CACHE_DIR, `${id}${fileExt}`);
-                fs.renameSync(photoFile.filepath, photoPath);
-
-                item.photoPath = photoPath;
-                item.photoUrl = `/inventory/${id}/photo`;
-                saveInventory();
-
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(item));
             });
             return;
         }
@@ -297,72 +263,53 @@ function handleInventoryRoutes(req, res) {
                 res.end('Item not found');
                 return;
             }
-
-            const deletedItem = inventory[itemIndex];
             
-            // Видаляємо фото з FS
+            const [deletedItem] = inventory.splice(itemIndex, 1);
+            
+            // Видаляємо файл фото, якщо він існує
             if (deletedItem.photoPath && fs.existsSync(deletedItem.photoPath)) {
                 fs.unlinkSync(deletedItem.photoPath);
             }
 
-            // Видаляємо запис з інвентарю
-            inventory.splice(itemIndex, 1);
             saveInventory();
-
-            res.writeHead(200, { 'Content-Type': 'text/plain' });
-            res.end(`Item ${id} deleted successfully.`);
+            res.writeHead(204); // 204 No Content
+            res.end();
             return;
         }
     }
 
-    // Оновіть фінальний виклик, щоб він включав DELETE
-    handleMethodNotAllowed(req, res, ['GET', 'PUT', 'DELETE']);
+    // Якщо жоден з обробників не спрацював, повертаємо управління основному роутингу
+    // де спрацює 404 або 405.
 }
+
 function handleSearch(req, res) {
     let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
-
+    req.on('data', chunk => {
+        body += chunk.toString();
+    });
     req.on('end', () => {
         const formData = querystring.parse(body);
-        const id = formData.id;
-        const hasPhoto = !!formData.has_photo; 
+        const query = formData.query ? formData.query.toLowerCase() : '';
 
-        const item = inventory.find(i => i.id === id);
-
-        if (!item) { // 404 Not Found
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            res.end('Item not found');
-            return;
-        }
-
-        const result = {
-            id: item.id,
-            inventory_name: item.inventory_name,
-            description: item.description
-        };
-
-        if (hasPhoto && item.photoUrl) {
-            result.photoUrl = item.photoUrl;
-        }
+        const results = inventory.filter(item => {
+            return item.inventory_name.toLowerCase().includes(query) ||
+                   item.description.toLowerCase().includes(query);
+        });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
+        res.end(JSON.stringify(results.map(item => ({
+            id: item.id,
+            inventory_name: item.inventory_name,
+            description: item.description,
+            photoUrl: item.photoUrl
+        }))));
     });
 }
-function parseJsonBody(req) {
-    return new Promise((resolve, reject) => {
-        let body = '';
-        req.on('data', chunk => { body += chunk.toString(); });
-        req.on('end', () => {
-            try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
-        });
-        req.on('error', reject);
-    });
-}
+
 function handleMethodNotAllowed(req, res, allowedMethods) {
     res.writeHead(405, { 
-        'Content-Type': 'text/plain', 
-        'Allow': allowedMethods.join(', ')
+        'Content-Type': 'text/plain',
+        'Allow': allowedMethods.join(', ') // Повідомляємо клієнту, які методи дозволені
     });
     res.end('405 Method Not Allowed');
 }
