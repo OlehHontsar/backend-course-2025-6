@@ -1,36 +1,271 @@
-const http = require('http');
+const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const querystring = require('querystring');
 const { program } = require('commander');
 const formidable = require('formidable');
 const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('./swagger.json'); 
 
-// --- 1. Налаштування Commander.js ---
+// --- ВБУДОВАНИЙ SWAGGER.JSON ДЛЯ ЗАВДАННЯ ---
+const swaggerDocument = {
+  "openapi": "3.0.0",
+  "info": {
+    "title": "API Сервісу Інвентаризації Пристроїв",
+    "description": "API для управління інвентаризованими пристроями, включаючи реєстрацію, пошук та оновлення даних і фотографій.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Локальний сервер розробки"
+    }
+  ],
+  "paths": {
+    "/register": {
+      "post": {
+        "summary": "Реєстрація нового пристрою (multipart/form-data)",
+        "operationId": "registerDevice",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "inventory_name": {
+                    "type": "string",
+                    "description": "Ім’я речі (обов'язкове поле)"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Опис речі"
+                  },
+                  "photo": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Файл фото зображення"
+                  }
+                },
+                "required": ["inventory_name"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Пристрій успішно створено",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InventoryItem" }
+              }
+            }
+          },
+          "400": {
+            "description": "Помилка валідації (ім’я не задано)"
+          },
+          "500": {
+            "description": "Помилка завантаження файлу"
+          }
+        }
+      }
+    },
+    "/inventory": {
+      "get": {
+        "summary": "Отримання списку всіх інвентаризованих речей",
+        "operationId": "listInventory",
+        "responses": {
+          "200": {
+            "description": "Успішне отримання списку речей",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/InventoryItem" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inventory/{ID}": {
+      "get": {
+        "summary": "Отримання інформації про конкретну річ за ID",
+        "operationId": "getInventoryItemById",
+        "parameters": [
+          { "name": "ID", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успішне отримання даних",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InventoryItem" }
+              }
+            }
+          },
+          "404": { "description": "Річ не знайдена" }
+        }
+      },
+      "put": {
+        "summary": "Оновлення імені або опису конкретної речі (JSON)",
+        "operationId": "updateInventoryItem",
+        "parameters": [
+          { "name": "ID", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "inventory_name": { "type": "string" },
+                  "description": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Дані успішно оновлено" },
+          "404": { "description": "Річ не знайдена" }
+        }
+      },
+      "delete": {
+        "summary": "Видалення інвентаризованої речі зі списку за ID",
+        "operationId": "deleteInventoryItem",
+        "parameters": [
+          { "name": "ID", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Річ успішно видалено" },
+          "404": { "description": "Річ не знайдена" }
+        }
+      }
+    },
+    "/inventory/{ID}/photo": {
+      "get": {
+        "summary": "Отримання фото зображення конкретної речі",
+        "operationId": "getPhoto",
+        "parameters": [
+          { "name": "ID", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успішне повернення зображення (image/jpeg)",
+            "content": {
+              "image/jpeg": { "schema": { "type": "string", "format": "binary" } }
+            }
+          },
+          "404": { "description": "Річ або фото не існує" }
+        }
+      },
+      "put": {
+        "summary": "Оновлення фото зображення конкретної речі",
+        "operationId": "updatePhoto",
+        "parameters": [
+          { "name": "ID", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "photo": { "type": "string", "format": "binary" }
+                },
+                "required": ["photo"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Фото успішно оновлено" },
+          "404": { "description": "Річ не знайдена" }
+        }
+      }
+    },
+    "/search": {
+      "post": {
+        "summary": "Обробка запиту пошуку пристрою за ID (x-www-form-urlencoded)",
+        "operationId": "searchDevice",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string", "description": "Серійний номер/ID пристрою" },
+                  "has_photo": { "type": "string", "description": "Прапорець для перевірки наявності фото ('on' якщо встановлено)" }
+                },
+                "required": ["id"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Річ знайдена",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/InventoryItem" }
+              }
+            }
+          },
+          "404": { "description": "Річ не знайдена або фото відсутнє" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "InventoryItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "example": "1678886400000" },
+          "inventory_name": { "type": "string", "example": "Ноутбук Dell XPS" },
+          "description": { "type": "string", "example": "Опис моделі 2024 року" },
+          "photo_url": { "type": "string", "nullable": true, "example": "/inventory/1678886400000/photo" }
+        }
+      }
+    }
+  }
+};
+
+// --- 1. Налаштування Commander.js та параметри командного рядка (Частина 1) ---
 program
   .option('-h, --host <host>', 'адреса сервера', 'localhost')
   .option('-p, --port <port>', 'порт сервера', 3000)
   .option('-c, --cache <dir>', 'шлях до директорії кешу', 'cache')
   .parse(process.argv);
 
-// Переконайтеся, що обов'язкові параметри задані, інакше Commander сам виведе помилку і завершить роботу.
 const options = program.opts();
+
+if (!options.host || !options.port || !options.cache) {
+    console.error("Помилка: Необхідно вказати всі обов'язкові параметри (--host, --port, --cache).");
+    program.help();
+    process.exit(1);
+}
+
 const HOST = options.host;
 const PORT = options.port;
 const CACHE_DIR = path.resolve(process.cwd(), options.cache);
 const INVENTORY_FILE = path.join(CACHE_DIR, 'inventory.json');
+const PHOTOS_DIR = path.join(CACHE_DIR, 'photos');
+
+// Створення директорій під час запуску, якщо їх немає
+if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+if (!fs.existsSync(PHOTOS_DIR)) {
+    fs.mkdirSync(PHOTOS_DIR, { recursive: true });
+}
 
 // --- 2. Ініціалізація сховища даних ---
 let inventory = [];
 
-if (!fs.existsSync(CACHE_DIR)) {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-}
-
-/**
- * Завантажує дані інвентарю з JSON файлу в пам'ять.
- */
 function loadInventory() {
     if (fs.existsSync(INVENTORY_FILE)) {
         try {
@@ -43,312 +278,157 @@ function loadInventory() {
 }
 loadInventory();
 
-/**
- * Зберігає поточний стан інвентарю в JSON файл.
- */
 function saveInventory() {
     fs.writeFileSync(INVENTORY_FILE, JSON.stringify(inventory, null, 2), 'utf8');
 }
 
-// --- 3. Основний обробник HTTP запитів (Routing Logic) ---
+// --- 3. Ініціалізація додатку Express та Middleware ---
 
-// Для використання swagger-ui-express з чистим http модулем, 
-// ми створюємо "проксі" обробник, який імітує поведінку Express.js
-const swaggerHandler = swaggerUi.setup(swaggerDocument);
-const serveSwaggerUi = swaggerUi.serve;
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 
-const server = http.createServer((req, res) => {
-    const url = req.url;
-    const method = req.method;
+// --- 4. Реалізація маршрутів API (Частина 2) ---
 
-    // A. Обслуговування статичних форм та Swagger UI
-    if (url.startsWith('/docs')) {
-        // Swagger UI на /docs
-        // Це вимагає, щоб swagger-ui-express обробляв внутрішні маршрути
-        serveSwaggerUi(req, res, () => {
-             // Якщо swaggerUi.serve не обробив запит, викликаємо setup для кінцевої сторінки index.html
-             swaggerHandler(req, res);
-        });
-        return;
-    }
-    
-    if (method === 'GET' && (url === '/RegisterForm.html' || url === '/SearchForm.html')) {
-        serveStaticFile(path.join(__dirname, 'public', url), res);
-        return;
-    }
-    
-    // B. Обробка POST /register
-    if (url === '/register' && method === 'POST') {
-        handleRegister(req, res);
-        return;
-    }
-    
-    // C. Обробка маршрутів, що починаються з /inventory
-    if (url.startsWith('/inventory')) {
-        const handled = handleInventoryRoutes(req, res);
-        if (handled) return;
-    }
+// GET /docs - Документація API (Частина 3)
+// Тепер використовує вбудовану константу swaggerDocument
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-    // D. Обробка POST /search
-    if (url === '/search' && method === 'POST') {
-        handleSearch(req, res);
-        return;
+// Middleware для пошуку речі за ID
+const findItemById = (req, res, next) => {
+    const item = inventory.find(i => i.id === req.params.ID);
+    if (!item) {
+        return res.status(404).json({ error: `Річ з ID ${req.params.ID} не знайдена` });
     }
-    
-    // E. Обробка 404 Not Found
-    res.writeHead(404, { 'Content-Type': 'text/plain' });
-    res.end('404 Not Found');
+    req.item = item;
+    next();
+};
+
+// *** ОБРОБНИК ДЛЯ GET / (виправляє помилку "Cannot GET /" і додає посилання) ***
+app.get('/', (req, res) => {
+    res.send(`<h1>Сервер працює!</h1>
+              <p>Документація API доступна тут: 
+              <a href="http://${HOST}:${PORT}/docs">http://${HOST}:${PORT}/docs</a></p>
+              <p>Форми: 
+              <a href="http://${HOST}:${PORT}/RegisterForm.html">RegisterForm.html</a> та 
+              <a href="http://${HOST}:${PORT}/SearchForm.html">SearchForm.html</a></p>`);
 });
 
-// --- 4. Запуск сервера ---
-server.listen(PORT, HOST, () => {
-  console.log(`Server running at http://${HOST}:${PORT}/`);
-  console.log(`API Documentation available at http://${HOST}:${PORT}/docs`);
-});
-
-// --- 5. Допоміжні функції (з коментарями JSDoc) ---
-
-/**
- * Обслуговує статичні файли з директорії public.
- * @param {string} filePath - Абсолютний шлях до файлу.
- * @param {http.ServerResponse} res - Об'єкт відповіді HTTP.
- */
-function serveStaticFile(filePath, res) {
-    fs.readFile(filePath, (err, data) => {
-        if (err) {
-            res.writeHead(404);
-            res.end("File not found");
-        } else {
-            const contentType = filePath.endsWith('.html') ? 'text/html' : 
-                                filePath.endsWith('.json') ? 'application/json' : 'text/plain';
-            res.writeHead(200, { 'Content-Type': contentType });
-            res.end(data);
-        }
-    });
-}
-
-/**
- * Обробляє POST-запит для реєстрації нового пристрою (multipart/form-data).
- * @param {http.ClientRequest} req - Об'єкт запиту HTTP.
- * @param {http.ServerResponse} res - Об'єкт відповіді HTTP.
- */
-function handleRegister(req, res) {
-    // *** ЗАМІНІТЬ ЦЕЙ РЯДОК ***
-    // const form = formidable({ uploadDir: CACHE_DIR, keepExtensions: true }); 
-
-    // *** НА ЦЕЙ РЯДОК (використовуйте 'new' та 'IncomingForm') ***
-    const form = new formidable.IncomingForm({ 
-        uploadDir: CACHE_DIR, 
-        keepExtensions: true 
-    });
-
+// POST /register - Реєстрація нового пристрою (multipart/form-data)
+app.post('/register', (req, res) => {
+    const form = formidable({ uploadDir: PHOTOS_DIR, keepExtensions: true });
     form.parse(req, (err, fields, files) => {
-        if (err) { res.writeHead(500); res.end('Server Error: ' + err.message); return; }
+        if (err) return res.status(500).json({ error: 'Помилка завантаження файлу' });
 
-        // formidable v3+ повертає поля (fields) та файли (files) як об'єкти, що містять масиви рядків/об'єкти файлів.
-        // Оригінальний код це вже враховував, але зробимо його більш надійним:
-        
-        // Допоміжна функція для отримання єдиного значення з потенційного масиву
-        const getSingleValue = (field) => Array.isArray(field) ? field[0] : field;
+        // Normalize formidable fields to handle potential array formats
+        const name = Array.isArray(fields.inventory_name) ? fields.inventory_name[0] : fields.inventory_name;
+        const description = Array.isArray(fields.description) ? fields.description[0] : fields.description;
+        const photoFile = Array.isArray(files.photo) ? files.photo[0] : files.photo;
 
-        const name = getSingleValue(fields.inventory_name);
-        const photoFile = getSingleValue(files.photo);
-
-        if (!name) { 
-            // Якщо ім'я відсутнє, видаляємо завантажений файл, якщо він є
-            if (photoFile && photoFile.filepath && fs.existsSync(photoFile.filepath)) {
-                fs.unlinkSync(photoFile.filepath);
-            }
-            res.writeHead(400, { 'Content-Type': 'text/plain' });
-            res.end('Error: inventory_name is required.');
-            return;
+        if (!name) { // 400 Bad Request
+            if (photoFile && photoFile.filepath) fs.unlinkSync(photoFile.filepath);
+            return res.status(400).json({ error: 'Поле inventory_name є обов\'язковим' });
         }
 
-        const id = Date.now().toString(); 
-        let photoPath = null;
-
-        if (photoFile) {
-            const fileExt = path.extname(photoFile.originalFilename || '.jpg');
-            // formidable переміщує файл в uploadDir, нам залишається лише перейменувати його
-            photoPath = path.join(CACHE_DIR, `${id}${fileExt}`);
-            fs.renameSync(photoFile.filepath, photoPath); 
-        }
-
-        const newItem = {
-            id: id,
-            inventory_name: name,
-            photoPath: photoPath, // Зберігаємо внутрішній шлях до файлу
-            photoUrl: photoPath ? `/inventory/${id}/photo` : null // URL для доступу до фотографії
-        };
-
+        const newId = Date.now().toString();
+        // Встановлюємо photo_url, що відповідає маршруту GET /inventory/<ID>/photo
+        const photoUrl = photoFile ? `/inventory/${newId}/photo?filename=${path.basename(photoFile.filepath)}` : null;
+// a ? b : c
+        const newItem = { id: newId, inventory_name: name, description: description, photo_url: photoUrl };
         inventory.push(newItem);
         saveInventory();
-
-        res.writeHead(201, { 'Content-Type': 'application/json', 'Location': `/inventory/${id}` }); 
-        res.end(JSON.stringify(newItem));
+        res.status(201).json(newItem); // 201 Created
     });
-}
+});
 
-/**
- * Обробляє всі маршрути, що стосуються інвентарю (/inventory, /inventory/:id, /inventory/:id/photo).
- * Включає GET, PUT, DELETE методи.
- * @param {http.ClientRequest} req - Об'єкт запиту HTTP.
- * @param {http.ServerResponse} res - Об'єкт відповіді HTTP.
- * @returns {boolean} True, якщо запит був оброблений, інакше False.
- */
-function handleInventoryRoutes(req, res) {
-    // ... (логіка обробки маршрутів інвентарю з Частини 2) ...
-    const urlParts = req.url.split('/').filter(part => part.length > 0);
-    const id = urlParts;
-    const item = id ? inventory.find(i => i.id === id) : null;
-    const isCollectionUrl = urlParts.length === 1 && urlParts === 'inventory';
-    const isItemUrl = urlParts.length === 2 && urlParts === 'inventory';
-    const isPhotoUrl = urlParts.length === 3 && urlParts === 'photo';
+// GET /inventory - Отримання списку всіх інвентаризованих речей
+app.get('/inventory', (req, res) => {
+    res.status(200).json(inventory);
+});
+
+// GET /inventory/<ID> - Отримання інформації про конкретну річ
+app.get('/inventory/:ID', findItemById, (req, res) => {
+    res.status(200).json(req.item);
+});
+
+// PUT /inventory/<ID> - Оновлення імені або опису конкретної речі (JSON)
+app.put('/inventory/:ID', findItemById, (req, res) => {
+    const { inventory_name, description } = req.body;
+    if (inventory_name) req.item.inventory_name = inventory_name;
+    if (description) req.item.description = description;
+    saveInventory();
+    res.status(200).json(req.item);
+});
+
+// GET /inventory/<ID>/photo - Отримання фото
+app.get('/inventory/:ID/photo', findItemById, (req, res) => {
+    if (!req.item.photo_url) return res.status(404).json({ error: 'Фото відсутнє' });
     
-    if (urlParts.length >= 2 && urlParts === 'inventory' && !item && req.method !== 'GET') {
-         res.writeHead(404, { 'Content-Type': 'text/plain' });
-         res.end('Item not found');
-         return true;
-    }
+    // Використовуємо basename, щоб знайти файл на диску
+    const fileNameOnDisk = path.basename(req.item.photo_url.split('?')[0]); 
+    const photoPath = path.join(PHOTOS_DIR, fileNameOnDisk);
 
-    if (req.method === 'GET') {
-        if (isCollectionUrl) {
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            const publicInventory = inventory.map(item => ({
-                id: item.id, inventory_name: item.inventory_name, description: item.description, photoUrl: item.photoUrl
-            }));
-            res.end(JSON.stringify(publicInventory));
-            return true;
-        } 
+    fs.access(photoPath, fs.constants.F_OK, (err) => {
+        if (err) return res.status(404).json({ error: 'Файл фотографії не знайдено на диску' });
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.status(200).sendFile(photoPath);
+    });
+});
+
+// PUT /inventory/<ID>/photo - Оновлення фото
+app.put('/inventory/:ID/photo', findItemById, (req, res) => {
+    const form = formidable({ uploadDir: PHOTOS_DIR, keepExtensions: true });
+    form.parse(req, (err, fields, files) => {
+        if (err) return res.status(500).json({ error: 'Помилка завантаження файлу' });
+        const photoFile = Array.isArray(files.photo) ? files.photo[0] : files.photo;
+        if (!photoFile) return res.status(400).json({ error: 'Файл фото не надано' });
         
-        if (isItemUrl || isPhotoUrl) {
-            if (!item) { res.writeHead(404); res.end('Item not found'); return true; }
-
-            if (isPhotoUrl) {
-                if (!item.photoPath || !fs.existsSync(item.photoPath)) { res.writeHead(404); res.end('Photo not found'); return true; }
-                res.writeHead(200, { 'Content-Type': 'image/jpeg' }); 
-                fs.createReadStream(item.photoPath).pipe(res);
-                return true;
-            } else if (isItemUrl) {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                const publicItem = { id: item.id, inventory_name: item.inventory_name, description: item.description, photoUrl: item.photoUrl };
-                res.end(JSON.stringify(publicItem));
-                return true;
-            }
-        }
-    }
-    
-    // ... (PUT та DELETE логіка з Частини 2) ...
-     if (req.method === 'PUT') {
-        if (isItemUrl) {
-            let body = '';
-            req.on('data', chunk => { body += chunk.toString(); });
-            req.on('end', () => {
-                try {
-                    const updates = JSON.parse(body);
-                    if (updates.inventory_name !== undefined) item.inventory_name = updates.inventory_name;
-                    if (updates.description !== undefined) item.description = updates.description;
-                    saveInventory();
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify(item));
-                } catch (e) {
-                    res.writeHead(400); res.end('Invalid JSON');
-                }
-            });
-            return true;
-        }
-         if (isPhotoUrl) {
-            const form = formidable({ uploadDir: CACHE_DIR, keepExtensions: true });
-            form.parse(req, (err, fields, files) => {
-                if (err) { res.writeHead(500); res.end('Server Error'); return; }
-
-                const photoFile = files.photo ? (Array.isArray(files.photo) ? files.photo : files.photo) : null;
-                if (!photoFile) { res.writeHead(400); res.end('Photo file missing'); return; }
-
-                if (item.photoPath && fs.existsSync(item.photoPath)) {
-                    fs.unlinkSync(item.photoPath);
-                }
-
-                const fileExt = path.extname(photoFile.originalFilename || '.jpg');
-                const newPhotoPath = path.join(CACHE_DIR, `${id}${fileExt}`);
-                fs.renameSync(photoFile.filepath, newPhotoPath);
-
-                item.photoPath = newPhotoPath;
-                item.photoUrl = `/inventory/${id}/photo`;
-                saveInventory();
-
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify(item));
-            });
-            return true;
-        }
-    }
-
-    if (req.method === 'DELETE') {
-        if (isItemUrl) {
-            if (item.photoPath && fs.existsSync(item.photoPath)) {
-                fs.unlinkSync(item.photoPath);
-            }
-            const index = inventory.findIndex(i => i.id === id);
-            inventory.splice(index, 1);
-            saveInventory();
-            
-            res.writeHead(204); // 204 No Content
-            res.end();
-            return true;
-        }
-    }
-    
-    handleMethodNotAllowed(req, res, ['GET', 'PUT', 'DELETE']);
-    return true;
-}
-
-
-/**
- * Обробляє POST-запит пошуку пристрою за ID (x-www-form-urlencoded).
- * @param {http.ClientRequest} req - Об'єкт запиту HTTP.
- * @param {http.ServerResponse} res - Об'єкт відповіді HTTP.
- */
-function handleSearch(req, res) {
-    let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
-    req.on('end', () => {
-        const { id: queryId, has_photo } = querystring.parse(body);
-
-        const item = inventory.find(i => i.id === queryId);
-
-        if (!item) {
-            res.writeHead(404, { 'Content-Type': 'text/plain' });
-            res.end('404 Not Found');
-            return;
+        if (req.item.photo_url) { // Видаляємо старе фото
+            const oldFileName = path.basename(req.item.photo_url.split('?')[0]);
+            const oldPhotoPath = path.join(PHOTOS_DIR, oldFileName);
+            if (fs.existsSync(oldPhotoPath)) fs.unlinkSync(oldPhotoPath);
         }
 
-        let responseItem = {
-            id: item.id,
-            inventory_name: item.inventory_name,
-            description: item.description,
-        };
-        
-        if (has_photo === 'on' || has_photo === 'true' || has_photo === true) {
-            responseItem.photoUrl = item.photoUrl;
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(responseItem));
+        // Оновлюємо URL з новим ім'ям файлу
+        req.item.photo_url = `/inventory/${req.item.id}/photo?filename=${path.basename(photoFile.filepath)}`;
+        saveInventory();
+        res.status(200).json({ message: 'Фото оновлено', item: req.item });
     });
-}
+});
 
-/**
- * Відправляє відповідь 405 Method Not Allowed.
- * @param {http.ClientRequest} req - Об'єкт запиту HTTP.
- * @param {http.ServerResponse} res - Об'єкт відповіді HTTP.
- * @param {string[]} allowedMethods - Список дозволених методів для даного ресурсу.
- */
-function handleMethodNotAllowed(req, res, allowedMethods) {
-    res.writeHead(405, { 
-        'Content-Type': 'text/plain',
-        'Allow': allowedMethods.join(', ')
-    });
-    res.end('405 Method Not Allowed');
-}
+// DELETE /inventory/<ID>
+app.delete('/inventory/:ID', findItemById, (req, res) => {
+    if (req.item.photo_url) { // Видаляємо фото
+        const fileNameOnDisk = path.basename(req.item.photo_url.split('?')[0]);
+        const photoPath = path.join(PHOTOS_DIR, fileNameOnDisk);
+        if (fs.existsSync(photoPath)) fs.unlinkSync(photoPath);
+    }
+    inventory = inventory.filter(i => i.id !== req.params.ID);
+    saveInventory();
+    res.status(200).json({ message: `Річ з ID ${req.params.ID} видалено` });
+});
+
+// POST /search (x-www-form-urlencoded)
+app.post('/search', (req, res) => {
+    const { id, has_photo } = req.body;
+    const item = inventory.find(i => i.id === id);
+
+    if (!item) return res.status(404).json({ error: `Річ з ID ${id} не знайдена` });
+    
+    // Перевіряємо прапорець has_photo ('on' або відсутній)
+    if (has_photo === 'on' && !item.photo_url) {
+        return res.status(404).json({ error: `Річ з ID ${id} знайдена, але фото відсутнє` });
+    }
+    res.status(200).json(item);
+});
+
+
+// --- 5. Запуск сервера ---
+
+// Запуск сервера з параметрами HOST та PORT з Commander.js
+app.listen(PORT, HOST, () => {
+    console.log(`Server running at http://${HOST}:${PORT}/`);
+    console.log(`API Documentation available at http://${HOST}:${PORT}/docs`);
+});
